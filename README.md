@@ -1,8 +1,11 @@
 ```
+this readme is just a notes doc
+
 attempt at basic raytracing in order to learn about rust
 following this: https://matklad.github.io/2022/12/31/raytracer-construction-kit.html
 
-this readme is just a notes doc
+math for to find a vector for any given (x, y) point (raycast)
+https://www.desmos.com/3d/mj4ogxndfb
 
 implementing add/sub/mult traits for Vector3D:
 * https://stackoverflow.com/questions/76370125/why-does-rust-opsadd-want-me-to-implement-add-with-a-move
