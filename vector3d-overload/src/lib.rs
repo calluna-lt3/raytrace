@@ -1,5 +1,9 @@
 #![allow(unused_variables, dead_code)]
 
+// NOTE: should jsut take non reference version for overloading, and then clone the interior
+// values and do not mutate
+// => this doesn't work bc the value is still moved inside, unless i derive Copy?
+//
 use std::ops::{Add, Sub, Mul};
 
 #[derive(Debug, PartialEq)]
@@ -12,13 +16,6 @@ pub struct Vector3D {
 impl Vector3D {
     pub fn new(x: f64, y: f64, z: f64) -> Self {
         Self { x, y, z }
-    }
-
-    pub fn scale(&self, scalar: f64) -> Vector3D {
-        let x = self.x * scalar;
-        let y = self.y * scalar;
-        let z = self.z * scalar;
-        Vector3D::new(x, y, z)
     }
 
     pub fn magnitude(&self) -> f64 {
@@ -45,6 +42,7 @@ impl Vector3D {
     }
 }
 
+
 impl Add for Vector3D {
     type Output = Self;
 
@@ -56,25 +54,36 @@ impl Add for Vector3D {
     }
 }
 
-impl Sub for Vector3D {
-    type Output = Self;
+impl Sub for &Vector3D {
+    type Output = Vector3D;
 
-    fn sub(self, other: Self) -> Self {
+    fn sub(self, other: Self) -> Vector3D {
         let x = self.x - other.x;
         let y = self.y - other.y;
         let z = self.z - other.z;
-        Self { x, y, z }
+        Vector3D::new(x, y, z)
     }
 }
 
-impl Mul for Vector3D {
-    type Output = Self;
+impl Mul for &Vector3D {
+    type Output = Vector3D;
 
-    fn mul(self, other: Self) -> Self {
+    fn mul(self, other: Self) -> Vector3D {
         let x = self.x * other.x;
         let y = self.y * other.y;
         let z = self.z * other.z;
-        Self { x, y, z }
+        Vector3D::new(x, y, z)
+    }
+}
+
+impl Mul<f64> for &Vector3D {
+    type Output =  Vector3D;
+
+    fn mul(self, other: f64) -> Vector3D {
+        let x = self.x * other;
+        let y = self.y * other;
+        let z = self.z * other;
+        Vector3D::new(x, y, z)
     }
 }
 
@@ -90,8 +99,7 @@ mod tests {
         let v2 = Vector3D::new(3., -2., 1.);
         let v3 = Vector3D::new(4., 0., 1.);
 
-        assert_eq!(&v1 + &v2, v3);
-        eprintln!("{v1:?}");
+        assert_eq!(v1 + v2, v3);
     }
 
     #[test]
@@ -100,7 +108,7 @@ mod tests {
         let v2 = Vector3D::new(3., -2., 1.);
         let v3 = Vector3D::new(-2., 4., -1.);
 
-        assert_eq!(v1 - v2, v3);
+        assert_eq!(&v1 - &v2, v3);
     }
 
     #[test]
@@ -109,7 +117,7 @@ mod tests {
         let v2 = Vector3D::new(3., -2., 1.);
         let v3 = Vector3D::new(3., -4., 0.);
 
-        assert_eq!(v1 * v2, v3);
+        assert_eq!(&v1 * &v2, v3);
     }
 
     #[test]
@@ -118,8 +126,7 @@ mod tests {
         let v2 = Vector3D::new(6., -4., 2.);
         let v3 = Vector3D::new(-9., 6., -3.);
 
-        assert_eq!(v1.scale(2.), v2);
-        assert_eq!(v1.scale(-3.), v3);
+        assert_eq!(&v1 * 2., v2);
     }
 
     #[test]

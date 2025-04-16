@@ -5,4 +5,4 @@ edition = "2024"
 
 [dependencies]
 ppm = { path = "../ppm" }
-vector = { path = "../vector" }
+vector3d = { path = "../vector3d" }

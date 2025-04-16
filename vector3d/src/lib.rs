@@ -1,5 +1,7 @@
 #![allow(unused_variables, dead_code)]
 
+use std::fmt::{self, Display};
+
 #[derive(Debug, PartialEq)]
 pub struct Vector3D {
     x: f64,
@@ -62,6 +64,12 @@ impl Vector3D {
         let z = self.z/mag;
         Vector3D::new(x, y, z)
     }
+}
+
+impl Display for Vector3D {
+   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+       write!(f, "[ {x}, {y}, {z} ]", x = self.x, y = self.y, z = self.z)
+   }
 
 }
 

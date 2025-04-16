@@ -31,7 +31,7 @@ fn hit_sphere(v: ((i32, i32, i32), (i32, i32, i32)), func: fn(i32, i32, i32) -> 
 }
 */
 
-fn normalize(x: i32, min: i32, max: i32) -> f32 {
+fn _normalize(x: i32, min: i32, max: i32) -> f32 {
     (x as f32 - min as f32) / (max as f32 - min as f32)
 }
 
@@ -44,6 +44,7 @@ fn in_circle(x: i32, y: i32, r: i32, func: fn(i32, i32, i32) -> i32) -> bool {
     if val > 0 { false } else { true }
 }
 
+#[allow(unused)]
 struct CameraInfo {
     origin: Vector3D,
     o_unit: Vector3D,
@@ -54,11 +55,11 @@ impl CameraInfo {
     fn new(d: usize, origin: Vector3D) -> Self {
         let o_unit = origin.normalize();
         let o_unit = o_unit.scale(-1.);
-        eprintln!("{:?}", o_unit);
         Self { origin, d, o_unit }
     }
 }
 
+#[allow(unused)]
 struct Plane {
     w: usize,
     h: usize,
@@ -79,8 +80,8 @@ impl Plane {
         let yi: usize = (self.origin.0 - y).try_into().unwrap();
         let xi: usize = (self.origin.1 + x).try_into().unwrap();
 
-        if xi >= self.data.len() || yi >= self.data[0].len() {
-            println!("Failed: ({}, {}) -> [{}][{}]", x, y, xi, yi);
+        if yi >= self.data.len() || xi >= self.data[0].len() {
+            eprintln!("Failed: ({}, {}) -> [{}][{}]", x, y, xi, yi);
             None
         } else {
             Some(&mut self.data[yi][xi])
@@ -106,14 +107,15 @@ impl Plane {
     */
 }
 
+#[allow(unused)]
 fn sphere(x: f64, y: f64, z: f64, radius: f64) {
     let v1 = Vector3D::new(x, y, z);
     let v2 = v1.mult(&v1);
 }
 
 fn main() {
-    let w = 64;
-    let h = 48;
+    let w = 5;
+    let h = 10;
     let d = 10;
     let r = 5;
     let mut plane = Plane::new(w, h);
@@ -126,13 +128,12 @@ fn main() {
 
     for x in range.0..range.1 {
         for y in domain.0..domain.1 {
-            if in_circle(x, y, r, circle) {
-                if let Some(p) = plane.point(x, y) {
-                    // maps (x, y) -> vector
-                    let v1 = Vector3D::new(x.into(), y.into(), -20.);
-                    let v2 = v1.add(&c_info.o_unit.scale(d as f64));
-                    let ray = v2.sub(&c_info.origin);
-                }
+            if let Some(_) = plane.point(x, y) {
+                // maps (x, y) -> vector
+                let v1 = Vector3D::new(x.into(), y.into(), -20.);
+                let v2 = v1.add(&c_info.o_unit.scale(d as f64));
+                let ray = v2.sub(&c_info.origin);
+                eprintln!("{point:>8} => {ray}", point = format!("({x}, {y})"))
             }
         }
     }
