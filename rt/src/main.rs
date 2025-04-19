@@ -59,6 +59,8 @@ impl CameraInfo {
     }
 }
 
+
+// TODO, use domain and range to create the plane to make things make more sense
 #[allow(unused)]
 struct Plane {
     w: usize,
@@ -81,30 +83,27 @@ impl Plane {
         let xi: usize = (self.origin.1 + x).try_into().unwrap();
 
         if yi >= self.data.len() || xi >= self.data[0].len() {
-            eprintln!("Failed: ({}, {}) -> [{}][{}]", x, y, xi, yi);
             None
         } else {
             Some(&mut self.data[yi][xi])
         }
     }
 
-    /*
     fn print(&self) {
         println!("[");
         for x in &self.data {
             print!("  [");
             for y in x {
-                if *y == 0 {
+                if y.0 == 255 {
                     print!(" - ");
                 } else {
-                    print!(" {y} ");
+                    print!(" {} ", y.0);
                 }
             }
             println!("]");
         }
         println!("]");
     }
-    */
 }
 
 #[allow(unused)]
@@ -113,27 +112,66 @@ fn sphere(x: f64, y: f64, z: f64, radius: f64) {
     let v2 = v1.mult(&v1);
 }
 
+fn solve_quadratic(a: f64, b: f64, c: f64) -> Result<(f64, f64), ()> {
+    let discr = b.powf(2.) - (4. * a * c);
+    if discr < 0. { return Err(()) }
+    else if discr == 0. {
+        let res = -0.5 * b / a;
+        Ok((res, res))
+    } else {
+        let q = if b > 0. { -0.5 * (b + f64::sqrt(discr)) }
+                     else { -0.5 * (b - f64::sqrt(discr)) };
+        Ok((q / a, c / q))
+    }
+}
+
 fn main() {
-    let w = 5;
-    let h = 10;
-    let d = 10;
-    let r = 5;
+    let w = 801;
+    let h = 601;
+    let d = 31;
+    let r = 30;
     let mut plane = Plane::new(w, h);
-    let c_info = CameraInfo::new(d, Vector3D::new(0., 0., -20.));
+    let c_info = CameraInfo::new(d, Vector3D::new(0., 0., -(d as f64)));
 
     let w: i32 = w.try_into().unwrap();
     let h: i32 = h.try_into().unwrap();
     let range = (-w / 2, w / 2);
     let domain = (-h / 2, h / 2);
 
-    for x in range.0..range.1 {
-        for y in domain.0..domain.1 {
-            if let Some(_) = plane.point(x, y) {
-                // maps (x, y) -> vector
-                let v1 = Vector3D::new(x.into(), y.into(), -20.);
+    //eprintln!("range = {range:?}, domain = {domain:?}");
+    //eprintln!("origin = {:?}", plane.origin);
+
+    for x in range.0..=range.1 {
+        for y in domain.0..=domain.1 {
+            if let Some(p) = plane.point(x, y) {
+                let v1 = Vector3D::new(x.into(), y.into(), -(d as f64));
                 let v2 = v1.add(&c_info.o_unit.scale(d as f64));
-                let ray = v2.sub(&c_info.origin);
-                eprintln!("{point:>8} => {ray}", point = format!("({x}, {y})"))
+                let dir = v2.sub(&c_info.origin).normalize();
+
+                let o = Vector3D::new(0., 0., -(d as f64));
+                let a = dir.dot(&dir);
+                let b = 2. * dir.dot(&o);
+                let c = o.dot(&o) - f64::powi(r as f64, 2);
+
+                let (t0, t1) = match solve_quadratic(a, b, c) {
+                    Err(_) => { continue },
+                    Ok(pt) => { pt },
+                };
+
+                // tangent (not rendering)
+                if t0 == t1 { }
+
+                // which is visible
+                let visible = if t0 > t1 {
+                    t0
+                } else {
+                    t1
+                };
+
+                // both not visible
+                if visible < 0. { continue; }
+
+                *p = (0, 0, 0);
             }
         }
     }

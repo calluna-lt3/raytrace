@@ -42,6 +42,22 @@ impl Vector3D {
         Vector3D::new(x, y, z)
     }
 
+    pub fn div(&self, other: &Vector3D) -> Vector3D {
+        let x = self.x / other.x;
+        let y = self.y / other.y;
+        let z = self.z / other.z;
+        Vector3D::new(x, y, z)
+    }
+
+
+    pub fn pow(&self, exp: f64) -> Vector3D {
+        let x = self.x.powf(exp);
+        let y = self.y.powf(exp);
+        let z = self.z.powf(exp);
+        Vector3D::new(x, y, z)
+    }
+
+
     pub fn magnitude(&self) -> f64 {
         f64::sqrt(self.x.powi(2) + self.y.powi(2) + self.z.powi(2))
     }

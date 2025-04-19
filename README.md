@@ -1,11 +1,8 @@
 ```
-this readme is just a notes doc
-
 attempt at basic raytracing in order to learn about rust
-following this: https://matklad.github.io/2022/12/31/raytracer-construction-kit.html
-
-math for to find a vector for any given (x, y) point (raycast)
-https://www.desmos.com/3d/mj4ogxndfb
+* https://matklad.github.io/2022/12/31/raytracer-construction-kit.html
+* https://www.scratchapixel.com/lessons/3d-basic-rendering/minimal-ray-tracer-rendering-simple-shapes/ray-sphere-intersection.html
+    - https://www.desmos.com/3d/uzapppri9x
 
 implementing add/sub/mult traits for Vector3D:
 * https://stackoverflow.com/questions/76370125/why-does-rust-opsadd-want-me-to-implement-add-with-a-move
