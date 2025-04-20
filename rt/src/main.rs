@@ -86,16 +86,16 @@ impl Scene {
                         // both not visible
                         if visible < 0. { continue; }
 
-                        let mag = dir.scale(visible).magnitude() as u8;
+                        let mag = dir.scale(visible).magnitude();
                         //eprintln!("({}, {}, {}) @ ({x}, {y}) => {mag}", sphere.color.0, sphere.color.1, sphere.color.2);
 //
                         match obj_visible {
                             Some((_, d)) => {
-                                if d > mag.into() {
-                                    obj_visible = Some((sphere, mag.into()))
+                                if d > mag {
+                                    obj_visible = Some((sphere, mag))
                                 }
                             },
-                            None => { obj_visible = Some((sphere, mag.into()))},
+                            None => { obj_visible = Some((sphere, mag))},
                         };
                     }
 
@@ -189,7 +189,7 @@ fn solve_quadratic(a: f64, b: f64, c: f64) -> Option<(f64, f64)> {
 fn main() {
     let w = 1801;
     let h = 1201;
-    let d = 300;
+    let d = 1000;
     let cam = Camera::new(d, Vector3D::new(0., 0., -(d as f64)));
     let plane = Plane::new(w, h);
     let mut scene = Scene::new(cam, plane);
