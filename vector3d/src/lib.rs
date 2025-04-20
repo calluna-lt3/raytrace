@@ -2,7 +2,7 @@
 
 use std::fmt::{self, Display};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct Vector3D {
     x: f64,
     y: f64,

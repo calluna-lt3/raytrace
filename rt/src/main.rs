@@ -1,57 +1,17 @@
 use ppm::PPM;
 use vector3d::Vector3D;
 
-/*
-struct Space<'a> {
-    w: i32,
-    h: i32,
-    d: i32,
-    origin: (i32, i32, i32),
-    data: Box<[Box<[Box<[(u8, u8, u8)]>]>]>,
-}
-
-impl<'a> Space<'a> {
-    fn new(w: i32, h: i32, d: i32) -> Self {
-        let origin = (w / 2, h / 2, d/2);
-        let data = vec![vec![vec![(0, 0, 0); h.try_into().unwrap()].into_boxed_slice(); w.try_into().unwrap()].into_boxed_slice(); d.try_into().unwrap()].into_boxed_slice();
-        Self { w, h, d, origin, data }
-    }
-
-    fn point(&'a self, x: usize, y: i32, z: i32) -> &'a mut (i32, i32, i32) {
-        self.data[x][y][z]
-    }
-}
-
-fn sphere5(x: i32, y: i32, z: i32) -> i32 {
-    x.pow(2) + y.pow(2) + z.pow(2) - i32::pow(5, 2)
-}
-
-fn hit_sphere(v: ((i32, i32, i32), (i32, i32, i32)), func: fn(i32, i32, i32) -> i32) -> bool {
-    true
-}
-*/
-
 fn _normalize(x: i32, min: i32, max: i32) -> f32 {
     (x as f32 - min as f32) / (max as f32 - min as f32)
 }
 
-fn circle(x: i32, y: i32, r: i32) -> i32 {
-    x.pow(2) + y.pow(2) - r.pow(2)
-}
-
-fn in_circle(x: i32, y: i32, r: i32, func: fn(i32, i32, i32) -> i32) -> bool {
-    let val = func(x, y, r);
-    if val > 0 { false } else { true }
-}
-
-#[allow(unused)]
-struct CameraInfo {
+struct Camera {
     origin: Vector3D,
     o_unit: Vector3D,
     d: usize,
 }
 
-impl CameraInfo {
+impl Camera {
     fn new(d: usize, origin: Vector3D) -> Self {
         let o_unit = origin.normalize();
         let o_unit = o_unit.scale(-1.);
@@ -60,8 +20,80 @@ impl CameraInfo {
 }
 
 
-// TODO, use domain and range to create the plane to make things make more sense
-#[allow(unused)]
+struct Scene {
+    cam: Camera,
+    plane: Plane,
+    spheres: Vec<Sphere>,
+}
+
+impl Scene {
+    fn new(cam: Camera, plane: Plane) -> Self {
+        Self {
+            cam, plane,
+            spheres: vec![],
+        }
+    }
+
+    fn add(&mut self, obj: Sphere) {
+        self.spheres.push(obj);
+    }
+
+    fn render(&mut self) {
+        let plane = &mut self.plane;
+        let d = self.cam.d as f64;
+
+        let w: i32 = plane.w.try_into().unwrap();
+        let h: i32 = plane.h.try_into().unwrap();
+        let range = (-w / 2, w / 2);
+        let domain = (-h / 2, h / 2);
+
+        for x in range.0..=range.1 {
+            for y in domain.0..=domain.1 {
+                if let Some(p) = &mut plane.point(x, y) {
+                    for sphere in &self.spheres {
+                        let r = sphere.radius as f64;
+
+                        // TODO: maybe make this a part of the sphere
+                        let center = Vector3D::new(sphere.x, sphere.y, sphere.z);
+
+                        let v1 = Vector3D::new(x.into(), y.into(), -d);
+                        let v2 = v1.add(&self.cam.o_unit.scale(d));
+                        let ray = v2.sub(&self.cam.origin);
+
+                        let mag = ray.magnitude();
+                        let dir = ray.normalize();
+
+                        let o = self.cam.origin.sub(&center);
+                        let a = dir.dot(&dir);
+                        let b = 2. * dir.dot(&o);
+                        let c = o.dot(&o) - f64::powi(r, 2);
+
+                        let (t0, t1) = match solve_quadratic(a, b, c) {
+                            Some(ts)  => ts,
+                            None      => continue,
+                        };
+
+                        // tangent
+                        if t0 == t1 { continue; }
+
+                        // which is visible
+                        let visible = if t0 > t1 {
+                            t0
+                        } else {
+                            t1
+                        };
+
+                        // both not visible
+                        if visible < 0. { continue; }
+
+                        **p = (mag as u8 * sphere.color.0, mag as u8 * sphere.color.1, mag as u8 * sphere.color.2);
+                    }
+                }
+            }
+        }
+    }
+}
+
 struct Plane {
     w: usize,
     h: usize,
@@ -70,12 +102,12 @@ struct Plane {
 }
 
 impl Plane {
-    fn new(w: usize, h: usize) -> Self {
+    fn new(w: usize, h: usize, ) -> Self {
         let oh: i32 = h.try_into().unwrap();
         let ow: i32 = w.try_into().unwrap();
         let origin = (oh / 2, ow / 2);
         let data = vec![vec![(255, 255, 255); w].into_boxed_slice(); h].into_boxed_slice();
-        Self { w, h, origin, data }
+        Self { w, h, origin, data, }
     }
 
     fn point(&mut self, x: i32, y: i32) -> Option<&mut (u8, u8, u8)> {
@@ -89,6 +121,8 @@ impl Plane {
         }
     }
 
+
+    #[allow(unused)]
     fn print(&self) {
         println!("[");
         for x in &self.data {
@@ -106,76 +140,52 @@ impl Plane {
     }
 }
 
-#[allow(unused)]
-fn sphere(x: f64, y: f64, z: f64, radius: f64) {
-    let v1 = Vector3D::new(x, y, z);
-    let v2 = v1.mult(&v1);
+struct Sphere {
+    x: f64,
+    y: f64,
+    z: f64,
+    radius: f64,
+    color: (u8, u8, u8),
 }
 
-fn solve_quadratic(a: f64, b: f64, c: f64) -> Result<(f64, f64), ()> {
+impl Sphere {
+    fn new(x: f64, y: f64, z: f64, radius: f64, color: (u8, u8, u8)) -> Self {
+        Self { x, y, z, radius, color, }
+    }
+}
+
+fn solve_quadratic(a: f64, b: f64, c: f64) -> Option<(f64, f64)> {
     let discr = b.powf(2.) - (4. * a * c);
-    if discr < 0. { return Err(()) }
-    else if discr == 0. {
+    if discr < 0. {
+        None
+    } else if discr == 0. {
         let res = -0.5 * b / a;
-        Ok((res, res))
+        Some((res, res))
     } else {
-        let q = if b > 0. { -0.5 * (b + f64::sqrt(discr)) }
-                     else { -0.5 * (b - f64::sqrt(discr)) };
-        Ok((q / a, c / q))
+        let q = if b > 0. {
+            -0.5 * (b + f64::sqrt(discr))
+        } else {
+            -0.5 * (b - f64::sqrt(discr))
+        };
+
+        Some((q / a, c / q))
     }
 }
 
 fn main() {
     let w = 801;
     let h = 601;
-    let d = 31;
-    let r = 30;
-    let mut plane = Plane::new(w, h);
-    let c_info = CameraInfo::new(d, Vector3D::new(0., 0., -(d as f64)));
-
-    let w: i32 = w.try_into().unwrap();
-    let h: i32 = h.try_into().unwrap();
-    let range = (-w / 2, w / 2);
-    let domain = (-h / 2, h / 2);
+    let d = 40;
+    let cam = Camera::new(d, Vector3D::new(0., 0., -(d as f64)));
+    let plane = Plane::new(w, h);
+    let mut scene = Scene::new(cam, plane);
+    scene.add(Sphere::new(0., -30., 0., 30., (255, 0, 0)));
+    scene.add(Sphere::new(30., 0., 0., 30., (0, 255, 0)));
+    scene.render();
 
     //eprintln!("range = {range:?}, domain = {domain:?}");
     //eprintln!("origin = {:?}", plane.origin);
 
-    for x in range.0..=range.1 {
-        for y in domain.0..=domain.1 {
-            if let Some(p) = plane.point(x, y) {
-                let v1 = Vector3D::new(x.into(), y.into(), -(d as f64));
-                let v2 = v1.add(&c_info.o_unit.scale(d as f64));
-                let dir = v2.sub(&c_info.origin).normalize();
-
-                let o = Vector3D::new(0., 0., -(d as f64));
-                let a = dir.dot(&dir);
-                let b = 2. * dir.dot(&o);
-                let c = o.dot(&o) - f64::powi(r as f64, 2);
-
-                let (t0, t1) = match solve_quadratic(a, b, c) {
-                    Err(_) => { continue },
-                    Ok(pt) => { pt },
-                };
-
-                // tangent (not rendering)
-                if t0 == t1 { }
-
-                // which is visible
-                let visible = if t0 > t1 {
-                    t0
-                } else {
-                    t1
-                };
-
-                // both not visible
-                if visible < 0. { continue; }
-
-                *p = (0, 0, 0);
-            }
-        }
-    }
-
-    let ppm = PPM::new(w.try_into().unwrap(), h.try_into().unwrap(), plane.data);
+    let ppm = PPM::new(w.try_into().unwrap(), h.try_into().unwrap(), scene.plane.data);
     ppm.print();
 }
