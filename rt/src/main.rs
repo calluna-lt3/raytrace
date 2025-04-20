@@ -1,7 +1,7 @@
 use ppm::PPM;
 use vector3d::Vector3D;
 
-fn _normalize(x: i32, min: i32, max: i32) -> f32 {
+fn normalize(x: i32, min: i32, max: i32) -> f32 {
     (x as f32 - min as f32) / (max as f32 - min as f32)
 }
 
@@ -50,19 +50,19 @@ impl Scene {
         for x in range.0..=range.1 {
             for y in domain.0..=domain.1 {
                 if let Some(p) = &mut plane.point(x, y) {
+                    // (x, y) => ray
+                    let v1 = Vector3D::new(x.into(), y.into(), -d);
+                    let v2 = v1.add(&self.cam.o_unit.scale(d));
+                    let ray = v2.sub(&self.cam.origin);
+                    let dir = ray.normalize();
+
+                    // for each point, find an object in list of objs and see if it hits
+                    let mut obj_visible: Option<(&Sphere, f64)> = None;
                     for sphere in &self.spheres {
                         let r = sphere.radius as f64;
-
-                        // TODO: maybe make this a part of the sphere
                         let center = Vector3D::new(sphere.x, sphere.y, sphere.z);
 
-                        let v1 = Vector3D::new(x.into(), y.into(), -d);
-                        let v2 = v1.add(&self.cam.o_unit.scale(d));
-                        let ray = v2.sub(&self.cam.origin);
-
-                        let mag = ray.magnitude();
-                        let dir = ray.normalize();
-
+                        // see if the ray hits obj
                         let o = self.cam.origin.sub(&center);
                         let a = dir.dot(&dir);
                         let b = 2. * dir.dot(&o);
@@ -74,10 +74,10 @@ impl Scene {
                         };
 
                         // tangent
-                        if t0 == t1 { continue; }
+                        if t0 == t1 {}
 
-                        // which is visible
-                        let visible = if t0 > t1 {
+                        // choose lowest distance from cam -> sphere
+                        let visible = if t0 < t1 {
                             t0
                         } else {
                             t1
@@ -86,7 +86,21 @@ impl Scene {
                         // both not visible
                         if visible < 0. { continue; }
 
-                        **p = (mag as u8 * sphere.color.0, mag as u8 * sphere.color.1, mag as u8 * sphere.color.2);
+                        let mag = dir.scale(visible).magnitude() as u8;
+                        //eprintln!("({}, {}, {}) @ ({x}, {y}) => {mag}", sphere.color.0, sphere.color.1, sphere.color.2);
+//
+                        match obj_visible {
+                            Some((_, d)) => {
+                                if d > mag.into() {
+                                    obj_visible = Some((sphere, mag.into()))
+                                }
+                            },
+                            None => { obj_visible = Some((sphere, mag.into()))},
+                        };
+                    }
+
+                    if let Some((obj, _)) = obj_visible {
+                        **p = (obj.color.0, obj.color.1, obj.color.2);
                     }
                 }
             }
@@ -173,14 +187,15 @@ fn solve_quadratic(a: f64, b: f64, c: f64) -> Option<(f64, f64)> {
 }
 
 fn main() {
-    let w = 801;
-    let h = 601;
-    let d = 40;
+    let w = 1801;
+    let h = 1201;
+    let d = 300;
     let cam = Camera::new(d, Vector3D::new(0., 0., -(d as f64)));
     let plane = Plane::new(w, h);
     let mut scene = Scene::new(cam, plane);
-    scene.add(Sphere::new(0., -30., 0., 30., (255, 0, 0)));
-    scene.add(Sphere::new(30., 0., 0., 30., (0, 255, 0)));
+    scene.add(Sphere::new(-100., 0., 0., 100., (255, 0, 0)));
+    scene.add(Sphere::new(100., 0., 0., 100., (0, 255, 0)));
+    scene.add(Sphere::new(0., 0., 0., 100., (0, 0, 255)));
     scene.render();
 
     //eprintln!("range = {range:?}, domain = {domain:?}");
