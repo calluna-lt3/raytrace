@@ -1,46 +1,56 @@
 use ppm::PPM;
 use vector3d::Vector3D;
 
-fn normalize(x: i32, min: i32, max: i32) -> f32 {
-    (x as f32 - min as f32) / (max as f32 - min as f32)
-}
 
 struct Camera {
-    origin: Vector3D,
-    o_unit: Vector3D,
-    d: usize,
+    loc: Vector3D,
+    dir: Vector3D,
+    dist: usize,
 }
 
 impl Camera {
-    fn new(d: usize, origin: Vector3D) -> Self {
-        let o_unit = origin.normalize();
-        let o_unit = o_unit.scale(-1.);
-        Self { origin, d, o_unit }
+    fn new(dist: usize, loc: Vector3D) -> Self {
+        let dir = loc.normalize();
+        let dir = dir.scale(-1.);
+        Self { loc, dist, dir }
     }
 }
-
 
 struct Scene {
     cam: Camera,
     plane: Plane,
-    spheres: Vec<Sphere>,
+    objects: Vec<Sphere>,
 }
 
 impl Scene {
     fn new(cam: Camera, plane: Plane) -> Self {
         Self {
             cam, plane,
-            spheres: vec![],
+            objects: vec![],
         }
     }
 
     fn add(&mut self, obj: Sphere) {
-        self.spheres.push(obj);
+        self.objects.push(obj);
+    }
+
+    fn point_to_vec(cam: &Camera, x: i32, y: i32) -> Vector3D {
+        let d = cam.dist as f64;
+        let v1 = Vector3D::new(x.into(), y.into(), -d);
+        let v2 = v1.add(&cam.dir.scale(d));
+        v2.sub(&cam.loc)
+    }
+
+    fn intersects(origin: &Vector3D, direction: &Vector3D, sphere: &Sphere) -> Option<(f64, f64)> {
+        let r = sphere.radius;
+        let a = direction.dot(&direction);
+        let b = 2. * direction.dot(&origin);
+        let c = origin.dot(&origin) - f64::powi(r, 2);
+        solve_quadratic(a, b, c)
     }
 
     fn render(&mut self) {
         let plane = &mut self.plane;
-        let d = self.cam.d as f64;
 
         let w: i32 = plane.w.try_into().unwrap();
         let h: i32 = plane.h.try_into().unwrap();
@@ -50,45 +60,30 @@ impl Scene {
         for x in range.0..=range.1 {
             for y in domain.0..=domain.1 {
                 if let Some(p) = &mut plane.point(x, y) {
-                    // (x, y) => ray
-                    let v1 = Vector3D::new(x.into(), y.into(), -d);
-                    let v2 = v1.add(&self.cam.o_unit.scale(d));
-                    let ray = v2.sub(&self.cam.origin);
-                    let dir = ray.normalize();
+                    let dir = Scene::point_to_vec(&self.cam, x, y).normalize();
 
                     // for each point, find an object in list of objs and see if it hits
                     let mut obj_visible: Option<(&Sphere, f64)> = None;
-                    for sphere in &self.spheres {
-                        let r = sphere.radius as f64;
-                        let center = Vector3D::new(sphere.x, sphere.y, sphere.z);
-
+                    for sphere in &self.objects {
                         // see if the ray hits obj
-                        let o = self.cam.origin.sub(&center);
-                        let a = dir.dot(&dir);
-                        let b = 2. * dir.dot(&o);
-                        let c = o.dot(&o) - f64::powi(r, 2);
-
-                        let (t0, t1) = match solve_quadratic(a, b, c) {
-                            Some(ts)  => ts,
-                            None      => continue,
+                        let origin = self.cam.loc.sub(&sphere.loc);
+                        let (t0, t1) = match Scene::intersects(&origin, &dir, &sphere) {
+                            Some(ts) => ts,
+                            None => continue,
                         };
 
                         // tangent
-                        if t0 == t1 {}
+                        // if t0 == t1 { continue; }
 
                         // choose lowest distance from cam -> sphere
-                        let visible = if t0 < t1 {
-                            t0
-                        } else {
-                            t1
-                        };
+                        let visible = f64::min(t0, t1);
 
                         // both not visible
                         if visible < 0. { continue; }
 
                         let mag = dir.scale(visible).magnitude();
                         //eprintln!("({}, {}, {}) @ ({x}, {y}) => {mag}", sphere.color.0, sphere.color.1, sphere.color.2);
-//
+
                         match obj_visible {
                             Some((_, d)) => {
                                 if d > mag {
@@ -106,6 +101,7 @@ impl Scene {
             }
         }
     }
+
 }
 
 struct Plane {
@@ -155,16 +151,15 @@ impl Plane {
 }
 
 struct Sphere {
-    x: f64,
-    y: f64,
-    z: f64,
+    loc: Vector3D,
     radius: f64,
     color: (u8, u8, u8),
 }
 
 impl Sphere {
     fn new(x: f64, y: f64, z: f64, radius: f64, color: (u8, u8, u8)) -> Self {
-        Self { x, y, z, radius, color, }
+        let loc = Vector3D::new(x, y, z);
+        Self { loc, radius, color, }
     }
 }
 
