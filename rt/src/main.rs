@@ -1,15 +1,26 @@
 use ppm::PPM;
 use vector3d::Vector3D;
 
+struct Light {
+    loc: Vector3D,
+    color: (f64, f64, f64),
+    intensity: f64,
+}
+
+impl Light {
+    fn new(loc: Vector3D, color: (f64, f64, f64), intensity: f64) -> Self {
+        Self { loc, color, intensity }
+    }
+}
 
 struct Camera {
     loc: Vector3D,
     dir: Vector3D,
-    dist: usize,
+    dist: f64,
 }
 
 impl Camera {
-    fn new(dist: usize, loc: Vector3D) -> Self {
+    fn new(dist: f64, loc: Vector3D) -> Self {
         let dir = loc.normalize();
         let dir = dir.scale(-1.);
         Self { loc, dist, dir }
@@ -18,14 +29,15 @@ impl Camera {
 
 struct Scene {
     cam: Camera,
+    light: Light,
     plane: Plane,
     objects: Vec<Sphere>,
 }
 
 impl Scene {
-    fn new(cam: Camera, plane: Plane) -> Self {
+    fn new(cam: Camera, light: Light, plane: Plane) -> Self {
         Self {
-            cam, plane,
+            cam, plane, light,
             objects: vec![],
         }
     }
@@ -41,7 +53,7 @@ impl Scene {
         v2.sub(&cam.loc)
     }
 
-    fn intersects(origin: &Vector3D, direction: &Vector3D, sphere: &Sphere) -> Option<(f64, f64)> {
+    fn sphere_intersects(origin: &Vector3D, direction: &Vector3D, sphere: &Sphere) -> Option<(f64, f64)> {
         let r = sphere.radius;
         let a = direction.dot(&direction);
         let b = 2. * direction.dot(&origin);
@@ -51,6 +63,8 @@ impl Scene {
 
     fn render(&mut self) {
         let plane = &mut self.plane;
+        let d = &self.cam.dist;
+        let light = &self.light;
 
         let w: i32 = plane.w.try_into().unwrap();
         let h: i32 = plane.h.try_into().unwrap();
@@ -63,11 +77,11 @@ impl Scene {
                     let dir = Scene::point_to_vec(&self.cam, x, y).normalize();
 
                     // for each point, find an object in list of objs and see if it hits
-                    let mut obj_visible: Option<(&Sphere, f64)> = None;
+                    let mut obj_visible: Option<(&Sphere, f64, (u8, u8, u8))> = None;
                     for sphere in &self.objects {
                         // see if the ray hits obj
                         let origin = self.cam.loc.sub(&sphere.loc);
-                        let (t0, t1) = match Scene::intersects(&origin, &dir, &sphere) {
+                        let (t0, t1) = match Scene::sphere_intersects(&origin, &dir, &sphere) {
                             Some(ts) => ts,
                             None => continue,
                         };
@@ -81,27 +95,49 @@ impl Scene {
                         // both not visible
                         if visible < 0. { continue; }
 
-                        let mag = dir.scale(visible).magnitude();
-                        //eprintln!("({}, {}, {}) @ ({x}, {y}) => {mag}", sphere.color.0, sphere.color.1, sphere.color.2);
+                        let p = dir.scale(visible).add(&Vector3D::new(0., 0., -d));
+                        let n = p.normalize();
+                        let r = light.loc.sub(&p).normalize();
+                        let collinear = r.dot(&n);
+                        // if hit, dont render light on it
+                        let mut light_visible = true;
+                        for sphere2 in &self.objects {
+                            if let Some(_) = Scene::sphere_intersects(&p, &r, &sphere2) {
+                                light_visible = false;
+                            }
+                        }
 
+                        eprintln!("({x}, {y}): p = {p}, n = {n}, r = {r}");
+
+                        let color = if light_visible {
+                            let r = (sphere.color.0 as f64) * light.color.0 * light.intensity * collinear;
+                            let g = (sphere.color.1 as f64) * light.color.1 * light.intensity * collinear;
+                            let b = (sphere.color.2 as f64) * light.color.2 * light.intensity * collinear;
+                            (r as u8, g as u8, b as u8)
+                        } else {
+                            (0, 0, 0)
+                        };
+
+
+                        let cur_dist = dir.scale(visible).magnitude();
                         match obj_visible {
-                            Some((_, d)) => {
-                                if d > mag {
-                                    obj_visible = Some((sphere, mag))
+                            Some((_, dist, _)) => {
+                                if dist > cur_dist {
+                                    obj_visible = Some((sphere, cur_dist, color))
                                 }
                             },
-                            None => { obj_visible = Some((sphere, mag))},
+                            None => { obj_visible = Some((sphere, cur_dist, color))},
                         };
                     }
 
-                    if let Some((obj, _)) = obj_visible {
-                        **p = (obj.color.0, obj.color.1, obj.color.2);
+                    if let Some((_, _, color)) = obj_visible {
+                        //eprintln!("({}, {}, {})", color.0, color.1, color.2);
+                        **p = color;
                     }
                 }
             }
         }
     }
-
 }
 
 struct Plane {
@@ -182,15 +218,14 @@ fn solve_quadratic(a: f64, b: f64, c: f64) -> Option<(f64, f64)> {
 }
 
 fn main() {
-    let w = 1801;
-    let h = 1201;
-    let d = 1000;
+    let w = 401;
+    let h = 301;
+    let d = 100.;
     let cam = Camera::new(d, Vector3D::new(0., 0., -(d as f64)));
     let plane = Plane::new(w, h);
-    let mut scene = Scene::new(cam, plane);
-    scene.add(Sphere::new(-100., 0., 0., 100., (255, 0, 0)));
-    scene.add(Sphere::new(100., 0., 0., 100., (0, 255, 0)));
-    scene.add(Sphere::new(0., 0., 0., 100., (0, 0, 255)));
+    let light = Light::new(Vector3D::new(-20., 20., 0.), (255., 255., 255.), 1.);
+    let mut scene = Scene::new(cam, light, plane);
+    scene.add(Sphere::new(0., 0., 0., 5., (255, 0, 0)));
     scene.render();
 
     //eprintln!("range = {range:?}, domain = {domain:?}");
