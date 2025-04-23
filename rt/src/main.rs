@@ -77,7 +77,8 @@ impl Scene {
                     let dir = Scene::point_to_vec(&self.cam, x, y).normalize();
 
                     // for each point, find an object in list of objs and see if it hits
-                    let mut obj_visible: Option<(&Sphere, f64, (u8, u8, u8))> = None;
+                    // TODO: remove sphere from this option
+                    let mut obj_visible: Option<(&Sphere, f64, (f64, f64, f64))> = None;
                     for sphere in &self.objects {
                         // see if the ray hits obj
                         let origin = self.cam.loc.sub(&sphere.loc);
@@ -95,10 +96,15 @@ impl Scene {
                         // both not visible
                         if visible < 0. { continue; }
 
+                        let z = dir.scale(visible);
                         let p = dir.scale(visible).add(&Vector3D::new(0., 0., -d));
                         let n = p.normalize();
                         let r = light.loc.sub(&p).normalize();
-                        let collinear = r.dot(&n);
+                        //let collinear = r.dot(&n);
+                        let collinear = 1.;
+
+                        eprintln!("({x}, {y}): z = {z}, p = {p}, n = {n}, r = {r}");
+
                         // if hit, dont render light on it
                         let mut light_visible = true;
                         for sphere2 in &self.objects {
@@ -107,15 +113,14 @@ impl Scene {
                             }
                         }
 
-                        eprintln!("({x}, {y}): p = {p}, n = {n}, r = {r}");
-
-                        let color = if light_visible {
-                            let r = (sphere.color.0 as f64) * light.color.0 * light.intensity * collinear;
-                            let g = (sphere.color.1 as f64) * light.color.1 * light.intensity * collinear;
-                            let b = (sphere.color.2 as f64) * light.color.2 * light.intensity * collinear;
-                            (r as u8, g as u8, b as u8)
+                        let color: (f64, f64, f64) = if light_visible {
+                            let r = sphere.color.0 * light.color.0 * light.intensity * collinear;
+                            let g = sphere.color.1 * light.color.1 * light.intensity * collinear;
+                            let b = sphere.color.2 * light.color.2 * light.intensity * collinear;
+                            eprintln!("hit: ({r}, {g}, {b})");
+                            (r, g, b)
                         } else {
-                            (0, 0, 0)
+                            (0., 0., 0.)
                         };
 
 
@@ -144,7 +149,7 @@ struct Plane {
     w: usize,
     h: usize,
     origin: (i32, i32),
-    data: Box<[Box<[(u8, u8, u8)]>]>,
+    data: Box<[Box<[(f64, f64, f64)]>]>,
 }
 
 impl Plane {
@@ -152,11 +157,11 @@ impl Plane {
         let oh: i32 = h.try_into().unwrap();
         let ow: i32 = w.try_into().unwrap();
         let origin = (oh / 2, ow / 2);
-        let data = vec![vec![(255, 255, 255); w].into_boxed_slice(); h].into_boxed_slice();
+        let data = vec![vec![(1., 1., 1.); w].into_boxed_slice(); h].into_boxed_slice();
         Self { w, h, origin, data, }
     }
 
-    fn point(&mut self, x: i32, y: i32) -> Option<&mut (u8, u8, u8)> {
+    fn point(&mut self, x: i32, y: i32) -> Option<&mut (f64, f64, f64)> {
         let yi: usize = (self.origin.0 - y).try_into().unwrap();
         let xi: usize = (self.origin.1 + x).try_into().unwrap();
 
@@ -174,7 +179,7 @@ impl Plane {
         for x in &self.data {
             print!("  [");
             for y in x {
-                if y.0 == 255 {
+                if y.0 == 1. {
                     print!(" - ");
                 } else {
                     print!(" {} ", y.0);
@@ -189,13 +194,13 @@ impl Plane {
 struct Sphere {
     loc: Vector3D,
     radius: f64,
-    color: (u8, u8, u8),
+    color: (f64, f64, f64),
 }
 
 impl Sphere {
-    fn new(x: f64, y: f64, z: f64, radius: f64, color: (u8, u8, u8)) -> Self {
+    fn new(x: f64, y: f64, z: f64, radius: f64, color: (f64, f64, f64)) -> Self {
         let loc = Vector3D::new(x, y, z);
-        Self { loc, radius, color, }
+        Self { loc, radius, color }
     }
 }
 
@@ -217,20 +222,38 @@ fn solve_quadratic(a: f64, b: f64, c: f64) -> Option<(f64, f64)> {
     }
 }
 
+
+use std::ops::{Div, Sub};
+fn normalize<T>(x: T, min: T, max: T) -> <<T as Sub>::Output as Div>::Output
+where
+    T: Div + Sub + Copy, <T as Sub>::Output: Div
+{
+    (x - min) / (max - min)
+}
+
 fn main() {
-    let w = 401;
-    let h = 301;
-    let d = 100.;
+    let w = 41;
+    let h = 31;
+    let d = 10.;
     let cam = Camera::new(d, Vector3D::new(0., 0., -(d as f64)));
     let plane = Plane::new(w, h);
-    let light = Light::new(Vector3D::new(-20., 20., 0.), (255., 255., 255.), 1.);
+    let light = Light::new(Vector3D::new(-10., -10., 0.), (1., 1., 1.), 1.);
     let mut scene = Scene::new(cam, light, plane);
-    scene.add(Sphere::new(0., 0., 0., 5., (255, 0, 0)));
+    scene.add(Sphere::new(0., 0., 0., 5., (1., 0., 0.)));
     scene.render();
 
     //eprintln!("range = {range:?}, domain = {domain:?}");
     //eprintln!("origin = {:?}", plane.origin);
 
-    let ppm = PPM::new(w.try_into().unwrap(), h.try_into().unwrap(), scene.plane.data);
+    // converts 0 -> 1: 0 -> 255
+    let data: Box<[Box<[(u8, u8, u8)]>]> = scene.plane.data.iter().map(|b| {
+        b.iter().map(|v| {
+            let r = (v.0 * 255.) as u8;
+            let g = (v.1 * 255.) as u8;
+            let b = (v.2 * 255.) as u8;
+            (r, g, b)
+        }).collect()
+    }).collect();
+    let ppm = PPM::new(w.try_into().unwrap(), h.try_into().unwrap(), data);
     ppm.print();
 }
