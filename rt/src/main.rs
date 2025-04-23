@@ -31,19 +31,13 @@ struct Scene {
     cam: Camera,
     light: Light,
     plane: Plane,
-    objects: Vec<Sphere>,
 }
 
 impl Scene {
     fn new(cam: Camera, light: Light, plane: Plane) -> Self {
         Self {
             cam, plane, light,
-            objects: vec![],
         }
-    }
-
-    fn add(&mut self, obj: Sphere) {
-        self.objects.push(obj);
     }
 
     fn point_to_vec(cam: &Camera, x: i32, y: i32) -> Vector3D {
@@ -61,7 +55,7 @@ impl Scene {
         solve_quadratic(a, b, c)
     }
 
-    fn render(&mut self) {
+    fn render(&mut self, objects: &Vec<Sphere>) {
         let plane = &mut self.plane;
         let d = &self.cam.dist;
         let light = &self.light;
@@ -76,10 +70,8 @@ impl Scene {
                 if let Some(p) = &mut plane.point(x, y) {
                     let dir = Scene::point_to_vec(&self.cam, x, y).normalize();
 
-                    // for each point, find an object in list of objs and see if it hits
-                    // TODO: remove sphere from this option
-                    let mut obj_visible: Option<(&Sphere, f64, (f64, f64, f64))> = None;
-                    for sphere in &self.objects {
+                    let mut obj_visible: Option<(f64, (f64, f64, f64))> = None;
+                    for sphere in objects {
                         // see if the ray hits obj
                         let origin = self.cam.loc.sub(&sphere.loc);
                         let (t0, t1) = match Scene::sphere_intersects(&origin, &dir, &sphere) {
@@ -88,7 +80,7 @@ impl Scene {
                         };
 
                         // tangent
-                        // if t0 == t1 { continue; }
+                        if t0 == t1 { continue; }
 
                         // choose lowest distance from cam -> sphere
                         let visible = f64::min(t0, t1);
@@ -96,20 +88,18 @@ impl Scene {
                         // both not visible
                         if visible < 0. { continue; }
 
-                        let z = dir.scale(visible);
                         let p = dir.scale(visible).add(&Vector3D::new(0., 0., -d));
                         let n = p.normalize();
                         let r = light.loc.sub(&p).normalize();
-                        //let collinear = r.dot(&n);
-                        let collinear = 1.;
-
-                        eprintln!("({x}, {y}): z = {z}, p = {p}, n = {n}, r = {r}");
+                        let collinear = r.dot(&n);
 
                         // if hit, dont render light on it
                         let mut light_visible = true;
-                        for sphere2 in &self.objects {
-                            if let Some(_) = Scene::sphere_intersects(&p, &r, &sphere2) {
-                                light_visible = false;
+                        for sphere2 in objects {
+                            if let Some((p0, p1)) = Scene::sphere_intersects(&p, &r, &sphere2) {
+                                if p0 > 0. && p1 > 0. {
+                                    light_visible = false;
+                                }
                             }
                         }
 
@@ -117,7 +107,6 @@ impl Scene {
                             let r = sphere.color.0 * light.color.0 * light.intensity * collinear;
                             let g = sphere.color.1 * light.color.1 * light.intensity * collinear;
                             let b = sphere.color.2 * light.color.2 * light.intensity * collinear;
-                            eprintln!("hit: ({r}, {g}, {b})");
                             (r, g, b)
                         } else {
                             (0., 0., 0.)
@@ -126,17 +115,16 @@ impl Scene {
 
                         let cur_dist = dir.scale(visible).magnitude();
                         match obj_visible {
-                            Some((_, dist, _)) => {
+                            Some((dist, _)) => {
                                 if dist > cur_dist {
-                                    obj_visible = Some((sphere, cur_dist, color))
+                                    obj_visible = Some((cur_dist, color))
                                 }
                             },
-                            None => { obj_visible = Some((sphere, cur_dist, color))},
+                            None => { obj_visible = Some((cur_dist, color))},
                         };
                     }
 
-                    if let Some((_, _, color)) = obj_visible {
-                        //eprintln!("({}, {}, {})", color.0, color.1, color.2);
+                    if let Some((_, color)) = obj_visible {
                         **p = color;
                     }
                 }
@@ -224,7 +212,7 @@ fn solve_quadratic(a: f64, b: f64, c: f64) -> Option<(f64, f64)> {
 
 
 use std::ops::{Div, Sub};
-fn normalize<T>(x: T, min: T, max: T) -> <<T as Sub>::Output as Div>::Output
+fn _normalize<T>(x: T, min: T, max: T) -> <<T as Sub>::Output as Div>::Output
 where
     T: Div + Sub + Copy, <T as Sub>::Output: Div
 {
@@ -232,15 +220,15 @@ where
 }
 
 fn main() {
-    let w = 41;
-    let h = 31;
-    let d = 10.;
+    let w = 1600;
+    let h = 1200;
+    let d = 1000.;
     let cam = Camera::new(d, Vector3D::new(0., 0., -(d as f64)));
     let plane = Plane::new(w, h);
-    let light = Light::new(Vector3D::new(-10., -10., 0.), (1., 1., 1.), 1.);
+    let light = Light::new(Vector3D::new(-1000., 1000., -1000.), (1., 1., 1.), 1.);
     let mut scene = Scene::new(cam, light, plane);
-    scene.add(Sphere::new(0., 0., 0., 5., (1., 0., 0.)));
-    scene.render();
+    let objects = vec![Sphere::new(0., 0., -100., 200., (1., 0., 0.)), Sphere::new(-200., -200., -200., 100., (0., 1., 0.)), Sphere::new(300., -300., 0., 100., (0., 0., 1.))];
+    scene.render(&objects);
 
     //eprintln!("range = {range:?}, domain = {domain:?}");
     //eprintln!("origin = {:?}", plane.origin);
