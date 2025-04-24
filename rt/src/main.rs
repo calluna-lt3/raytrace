@@ -97,7 +97,7 @@ impl Scene {
                         let mut light_visible = true;
                         for sphere2 in objects {
                             if let Some((p0, p1)) = Scene::sphere_intersects(&p, &r, &sphere2) {
-                                if p0 > 0. && p1 > 0. {
+                                if p0 > 0. || p1 > 0. {
                                     light_visible = false;
                                 }
                             }
@@ -227,7 +227,11 @@ fn main() {
     let plane = Plane::new(w, h);
     let light = Light::new(Vector3D::new(-1000., 1000., -1000.), (1., 1., 1.), 1.);
     let mut scene = Scene::new(cam, light, plane);
-    let objects = vec![Sphere::new(0., 0., -100., 200., (1., 0., 0.)), Sphere::new(-200., -200., -200., 100., (0., 1., 0.)), Sphere::new(300., -300., 0., 100., (0., 0., 1.))];
+    let objects = vec![
+        Sphere::new(0., 0., -100., 200., (1., 0., 0.)),
+        Sphere::new(0., 0., -400., 100., (0., 1., 0.)),
+        Sphere::new(300., -300., 400., 100., (0., 0., 1.))
+    ];
     scene.render(&objects);
 
     //eprintln!("range = {range:?}, domain = {domain:?}");
