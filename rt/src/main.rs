@@ -30,13 +30,12 @@ impl Camera {
 struct Scene {
     cam: Camera,
     light: Light,
-    plane: Plane,
 }
 
 impl Scene {
-    fn new(cam: Camera, light: Light, plane: Plane) -> Self {
+    fn new(cam: Camera, light: Light) -> Self {
         Self {
-            cam, plane, light,
+            cam, light,
         }
     }
 
@@ -55,27 +54,85 @@ impl Scene {
         solve_quadratic(a, b, c)
     }
 
-    fn render(&mut self, objects: &Vec<Sphere>) {
-        let plane = &mut self.plane;
-        let d = &self.cam.dist;
-        let light = &self.light;
+}
 
-        let w: i32 = plane.w.try_into().unwrap();
-        let h: i32 = plane.h.try_into().unwrap();
+struct Plane {
+    stride: usize,
+    origin: (i32, i32),
+    data: Box<[(f64, f64, f64)]>,
+}
+
+impl Plane {
+    fn new(w: usize, h: usize) -> Self {
+        let origin = (TryInto::<i32>::try_into(h).expect("height too big") / 2,
+                      TryInto::<i32>::try_into(w).expect("width too big") / 2);
+        let data = vec![(1., 1., 1.); w * h].into_boxed_slice();
+        Self {
+            origin, data,
+            stride: w,
+        }
+    }
+
+    fn point(&mut self, x: i32, y: i32) -> Option<&mut (f64, f64, f64)> {
+        let stride: i32 = self.stride.try_into().unwrap();
+        let w: i32 = self.width().try_into().unwrap();
+        let h: i32 = self.height().try_into().unwrap();
+        let range = (-w / 2, w / 2);
+        let domain = (-h / 2, h / 2);
+
+        if x < range.0 || x > range.1 || y < domain.0 || y > domain.1 {
+            None
+        } else {
+            // make this row wise
+            let pos: usize = TryInto::<usize>::try_into(stride * (self.origin.0 - y) + (self.origin.1 + x)).unwrap();
+            Some(&mut self.data[pos])
+        }
+    }
+
+    fn width(&self) -> usize {
+        self.stride
+    }
+
+    fn height(&self) -> usize {
+        self.data.len() / self.stride
+    }
+
+    #[allow(unused)] fn print(&self) {
+        println!("[");
+        for (x, val) in self.data.iter().enumerate() {
+            if x % self.stride == 0 { print!("  ["); }
+            if val.0 == 1. {
+                print!(" - ");
+            } else {
+                print!(" {} ", val.0);
+            }
+            if x % self.stride + 1 == self.stride { println!("]"); }
+        }
+        println!("]");
+    }
+
+    fn render(&mut self, scene: &Scene, objects: &Vec<Sphere>) {
+        let d = &scene.cam.dist;
+        let light = &scene.light;
+
+        let w: i32 = self.width().try_into().unwrap();
+        let h: i32 = self.height().try_into().unwrap();
         let range = (-w / 2, w / 2);
         let domain = (-h / 2, h / 2);
 
         for x in range.0..=range.1 {
             for y in domain.0..=domain.1 {
-                if let Some(p) = &mut plane.point(x, y) {
-                    let dir = Scene::point_to_vec(&self.cam, x, y).normalize();
+                if let Some(p) = &mut self.point(x, y) {
+                    let dir = Scene::point_to_vec(&scene.cam, x, y).normalize();
 
                     let mut obj_visible: Option<(f64, (f64, f64, f64))> = None;
                     for sphere in objects {
                         // see if the ray hits obj
-                        let origin = self.cam.loc.sub(&sphere.loc);
+                        let origin = scene.cam.loc.sub(&sphere.loc);
                         let (t0, t1) = match Scene::sphere_intersects(&origin, &dir, &sphere) {
-                            Some(ts) => ts,
+                            Some(ts) => {
+                                ts
+                            },
                             None => continue,
                         };
 
@@ -96,10 +153,9 @@ impl Scene {
                         // if hit, dont render light on it
                         let mut light_visible = true;
                         for sphere2 in objects {
+                            if sphere2 == sphere { continue; }
                             if let Some((p0, p1)) = Scene::sphere_intersects(&p, &r, &sphere2) {
-                                if p0 > 0. || p1 > 0. {
-                                    light_visible = false;
-                                }
+                                if p0 > 0. && p1 > 0. { light_visible = false; }
                             }
                         }
 
@@ -133,52 +189,7 @@ impl Scene {
     }
 }
 
-struct Plane {
-    w: usize,
-    h: usize,
-    origin: (i32, i32),
-    data: Box<[Box<[(f64, f64, f64)]>]>,
-}
-
-impl Plane {
-    fn new(w: usize, h: usize, ) -> Self {
-        let oh: i32 = h.try_into().unwrap();
-        let ow: i32 = w.try_into().unwrap();
-        let origin = (oh / 2, ow / 2);
-        let data = vec![vec![(1., 1., 1.); w].into_boxed_slice(); h].into_boxed_slice();
-        Self { w, h, origin, data, }
-    }
-
-    fn point(&mut self, x: i32, y: i32) -> Option<&mut (f64, f64, f64)> {
-        let yi: usize = (self.origin.0 - y).try_into().unwrap();
-        let xi: usize = (self.origin.1 + x).try_into().unwrap();
-
-        if yi >= self.data.len() || xi >= self.data[0].len() {
-            None
-        } else {
-            Some(&mut self.data[yi][xi])
-        }
-    }
-
-
-    #[allow(unused)]
-    fn print(&self) {
-        println!("[");
-        for x in &self.data {
-            print!("  [");
-            for y in x {
-                if y.0 == 1. {
-                    print!(" - ");
-                } else {
-                    print!(" {} ", y.0);
-                }
-            }
-            println!("]");
-        }
-        println!("]");
-    }
-}
-
+#[derive(PartialEq)]
 struct Sphere {
     loc: Vector3D,
     radius: f64,
@@ -219,33 +230,40 @@ where
     (x - min) / (max - min)
 }
 
+fn _flatten_tuple<T>(tuple: (T, T, T)) -> [T; 3] {
+    [tuple.0, tuple.1, tuple.2]
+}
+
 fn main() {
-    let w = 1600;
-    let h = 1200;
+    let w = 1201;
+    let h = 1201;
     let d = 1000.;
     let cam = Camera::new(d, Vector3D::new(0., 0., -(d as f64)));
-    let plane = Plane::new(w, h);
     let light = Light::new(Vector3D::new(-1000., 1000., -1000.), (1., 1., 1.), 1.);
-    let mut scene = Scene::new(cam, light, plane);
+    let scene = Scene::new(cam, light);
+
     let objects = vec![
-        Sphere::new(0., 0., -100., 200., (1., 0., 0.)),
-        Sphere::new(0., 0., -400., 100., (0., 1., 0.)),
-        Sphere::new(300., -300., 400., 100., (0., 0., 1.))
+        Sphere::new(0., 0., 0., 200., (1., 0., 0.)),
+        Sphere::new(-200., -200., -100., 100., (0., 1., 0.)),
     ];
-    scene.render(&objects);
+
+    let mut plane = Plane::new(w, h);
+    //eprintln!("width = {}, height = {}", plane.width(), plane.height());
+    //eprintln!("origin = ({}, {})", plane.origin.0, plane.origin.1);
+    plane.render(&scene, &objects);
+    //plane.print();
 
     //eprintln!("range = {range:?}, domain = {domain:?}");
     //eprintln!("origin = {:?}", plane.origin);
 
-    // converts 0 -> 1: 0 -> 255
-    let data: Box<[Box<[(u8, u8, u8)]>]> = scene.plane.data.iter().map(|b| {
-        b.iter().map(|v| {
-            let r = (v.0 * 255.) as u8;
-            let g = (v.1 * 255.) as u8;
-            let b = (v.2 * 255.) as u8;
-            (r, g, b)
-        }).collect()
+    // converts from 0..1 => 0..255
+    let data: Box<[(u8, u8, u8)]> = plane.data.iter().map(|c| {
+        let r = (c.0 * 255.) as u8;
+        let g = (c.1 * 255.) as u8;
+        let b = (c.2 * 255.) as u8;
+        (r, g, b)
     }).collect();
+
     let ppm = PPM::new(w.try_into().unwrap(), h.try_into().unwrap(), data);
     ppm.print();
 }
